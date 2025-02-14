@@ -1,8 +1,8 @@
-#### 241115 - Pipeline v1.5 (Work in progress) ####
+##################################################################
+# Pure xcms pipeline from .mzML files to data fit for statistics #
+##################################################################
 
-#### 240605 - Unified pipeline script - v1.0 ####
-
-##### 241028 Hackathon:
+##### 241028 Hackathon - Anton Ribbenstedt + Carl Brunius - Planning of and implementation of v1.6 ####
 #- Compartmentalize all "pipes" into separate functions in one wrapper
 #- Will have to slaughter IPORT to get the optimization and apply to LaMa finding optimizer
 #- Tracking features of aligned and PPd peaks to features
