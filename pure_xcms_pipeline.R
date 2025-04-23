@@ -1,8 +1,8 @@
-##################################################################
-# Pure xcms pipeline from .mzML files to data fit for statistics #
-##################################################################
+#### 240605 - Unified pipeline script - v1.0  ####
+#### 241115 - Pipeline v1.5                   ####
+#### 250423 - Unified pipeline script - V1.61 ####
 
-##### 241028 Hackathon - Anton Ribbenstedt + Carl Brunius - Planning of and implementation of v1.6 ####
+##### 241028 Hackathon:
 #- Compartmentalize all "pipes" into separate functions in one wrapper
 #- Will have to slaughter IPORT to get the optimization and apply to LaMa finding optimizer
 #- Tracking features of aligned and PPd peaks to features
@@ -52,7 +52,7 @@ library(miscTools)
 #### Should be an excel config file?7
 #Paths and dataset meta data
 setwd("/home/antonri/Documents/R/")
-inPath <- "/home/antonri/Documents/Pipeline/Input/"
+inPath <- "/home/antonri/Documents/Pipeline/Input/250220_PrXXX_BroadCecilia/"
 outPath <- "/home/antonri/Documents/Pipeline/Output/"
 numThreads <- 14
 chrom <- "" #RP / HILIC
@@ -1097,47 +1097,70 @@ for (batch_code in batch_codes_unique) {
   #- How to look at post-correction PCAs?
   #- 1. Project into old PCA (will give a better view of how the situation improved)
   #- 2. Make a new PCA (might look like there still are drift effects)
-  pca_res <- prcomp(selected_batch$peakTable, scale. = TRUE)
+  pca_res <- prcomp(PT_alignBat, scale. = TRUE)
   png(filename=paste0(batchDir, "/", format(as.Date(Sys.Date()), "%Y%m%d"), "_", chrom, "_", pol,"_PreDriftCorr-Dots.png"), width=2559, height=1376, res=120)
-  print(autoplot(pca_res, data=selected_batch$meta, colour="group", size=3)  + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow"))) #autoplot(pca_res, data=meta, colour="Type", size=3, label=T, label.size=3)
+  print(autoplot(pca_res, data=LCMS_data, colour="group", size=3)  + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow"))) #autoplot(pca_res, data=meta, colour="Type", size=3, label=T, label.size=3)
   dev.off()
-
-  rownames(pca_res$x) <- rownames(selected_batch$peakTable)
+  
   png(filename=paste0(batchDir, "/", format(as.Date(Sys.Date()), "%Y%m%d"), "_", chrom, "_", pol,"_PreDriftCorr-Labels.png"), width=2559, height=1376, res=120)
-  print(autoplot(pca_res, data=selected_batch$meta, colour="group", shape=F, label=T, label.label="filename", label.size=3) + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow")))
+  print(autoplot(pca_res, data=LCMS_data, colour="group", shape=F, label=T, label.size=3) + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow")))
   dev.off()
-
-  rownames(pca_res$x) <- selected_batch$meta$sample
+  
+  rownames(pca_res$x) <- LCMS_data$sample
   png(filename=paste0(batchDir, "/", format(as.Date(Sys.Date()), "%Y%m%d"), "_", chrom, "_", pol,"_PreDriftCorr-Numbers.png"), width=2559, height=1376, res=120)
-  print(autoplot(pca_res, data=selected_batch$meta, colour="group", shape=F, label=T, label.label="injection", label.size=3) + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow")))
+  print(autoplot(pca_res, data=LCMS_data, colour="group", shape=F, label=T, label.size=3) + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow")))
   dev.off()
-
+  
   # Let user decide on G-parameters
+  if(sum(grepl("sQC",selected_batch$meta$filename)) < 3){
+    selected_batch$peakTable <- rbind(selected_batch$peakTable,
+                                      selected_batch$peakTable[nrow(selected_batch$peakTable),])
+    temp_name <- rownames(selected_batch$peakTable)[nrow(selected_batch$peakTable) - 1]
+    temp_inj <- strsplit(strsplit(temp_name, "_")[[1]][6],
+                         "[.]")[[1]][1]
+    
+    new_inj <- addZeroes(as.integer(temp_inj)+1)
+    rownames(selected_batch$peakTable)[nrow(selected_batch$peakTable)] <- gsub(temp_inj,
+                                                                               new_inj,
+                                                                               temp_name)
+    
+    selected_batch$meta <- rbind(selected_batch$meta,
+                                 selected_batch$meta[nrow(selected_batch$meta),])
+    selected_batch$meta$filename <- rownames(selected_batch$peakTable)[nrow(selected_batch$peakTable)]
+    selected_batch$meta$injection[nrow(selected_batch$peakTable)] <- selected_batch$meta$injection[nrow(selected_batch$peakTable)] +1
+    
+  }
+  
   sink(file=paste0(batchDir,"/",batch_code,"_output.txt"))
-  drift_correction <- correctDrift(peakTable = selected_batch$peakTable, injections = selected_batch$meta$injection, sampleGroups =
-                                     selected_batch$meta$group, QCID = "sQC", RefID = "ltQC", G = seq(1,35, by = 3), reportPath=batchDir)
+  if(any(grepl("ltQC", selected_batch$meta$filename))){
+    drift_correction <- correctDrift(peakTable = selected_batch$peakTable, injections = selected_batch$meta$injection, sampleGroups = 
+                                       selected_batch$meta$group, QCID = "sQC", RefID = "ltQC", G = seq(1,35, by = 3), reportPath=batchDir)
+  } else {
+    drift_correction <- correctDrift(peakTable = selected_batch$peakTable, injections = selected_batch$meta$injection, sampleGroups = 
+                                       selected_batch$meta$group, QCID = "sQC", G = seq(1,35, by = 3), reportPath=batchDir)
+  }
+  
   sink()
-
-  correctedBatches[[as.integer(batch_no)]] <- drift_correction
-
+  
   ##### 241028 Hackathon:
   #- Add post-correction plotting of batches
   #- Calle knows person who has done automatic correction choosing algorithm which will apply the most suitable
   #- Implement that instead of batchCorr if library is available
-
+  
+  
   ##### 241106 Anton: How to project new numbers into old PCA?
-  pca_res <- prcomp(drift_correction$TestFeatsFinal, scale. = TRUE)
+  pca_res <- prcomp(PT_alignBat, scale. = TRUE)
   png(filename=paste0(batchDir, "/", format(as.Date(Sys.Date()), "%Y%m%d"), "_", chrom, "_", pol,"_PostBatchCorr-Dots.png"), width=2559, height=1376, res=120)
-  print(autoplot(pca_res, data=selected_batch$meta, colour="group", size=3)  + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow"))) #autoplot(pca_res, data=meta, colour="Type", size=3, label=T, label.size=3)
+  print(autoplot(pca_res, data=LCMS_data, colour="group", size=3)  + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow"))) #autoplot(pca_res, data=meta, colour="Type", size=3, label=T, label.size=3)
   dev.off()
-
+  
   png(filename=paste0(batchDir, "/", format(as.Date(Sys.Date()), "%Y%m%d"), "_", chrom, "_", pol,"_PostBatchCorr-Labels.png"), width=2559, height=1376, res=120)
-  print(autoplot(pca_res, data=selected_batch$meta, colour="group", shape=F, label=T, label.label="filename", label.size=3) + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow")))
+  print(autoplot(pca_res, data=LCMS_data, colour="group", shape=F, label=T, label.size=3) + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow")))
   dev.off()
-
-  # rownames(pca_res$x) <- LCMS_data$sample
+  
+  rownames(pca_res$x) <- LCMS_data$sample
   png(filename=paste0(batchDir, "/", format(as.Date(Sys.Date()), "%Y%m%d"), "_", chrom, "_", pol,"_PostBatchCorr-Numbers.png"), width=2559, height=1376, res=120)
-  print(autoplot(pca_res, data=selected_batch$meta, colour="group", shape=F, label=T, label.label="injection", label.size=3) + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow")))
+  print(autoplot(pca_res, data=LCMS_data, colour="group", shape=F, label=T, label.size=3) + scale_color_manual(values = c("black", "red", "green", "orange", "blue", "yellow")))
   dev.off()
 }
 
